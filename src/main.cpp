@@ -23,20 +23,37 @@ uint16_t LoadAddress() {
   return address;
 }
 
-void PulseDataLoad() {
+void PulseDataLockAndLoad() {
   PORTD &= B10111111;
   PORTD |= B01000000;
 }
 
+void DataEnabled() {
+  PORTC &= B11011111;
+}
+
+void DataDisabled() {
+  PORTC |= B00100000;
+}
+
 uint16_t LoadData() {
   uint8_t data = 0;
-  PulseDataLoad();
+  PulseDataLockAndLoad();
   for (int i = 0; i < 8; i++) {
-    data = data << 1 | (PIND >> 6 & B00000001);
-    Serial.println(data, BIN);
+    data = data << 1 | (PIND >> 5 & B00000001);
     PulseClock();
   };
   return data;
+}
+
+void SetData(uint8_t data) {
+  for (int i = 0; i < 8; i++) {
+    PORTC = (PORTC & B11101111) | ((data & B10000000) >> 3);
+    PulseClock();
+    data <<= 1;
+  };
+  PulseDataLockAndLoad();
+  DataEnabled();
 }
 
 void setup() {
@@ -48,6 +65,9 @@ void setup() {
   PORTD |= B01001100; // PD6(D6)H,PD5(D5)H,PD4(D4)H,PD3(D3)H,PD2(D2)H
   DDRD  |= B01001100; // PD6(D6)O,                 ,PD3(D3)O,PD2(D2)O
   DDRD  &= B11001111; //         ,PD5(D5)I,PD4(D4)I,
+
+  PORTC |= B00110000; // PC4(A4)H,PC5(A5)H,
+  DDRC  |= B00110000; // PC4(A4)O,PC5(A5)O,
 
   // reserve 200 bytes for the inputString:
   inputString.reserve(200);
@@ -63,8 +83,15 @@ void loop() {
         Serial.write(address & 0xFF);
         Serial.write(address >> 8);
         break;
-      case 'r': // retrieve data
+      case 'd': // retrieve data
         Serial.write(LoadData());
+        break;
+      case 'D': // set data
+        if (inputString.length() > 2) {
+          SetData(inputString.charAt(1));
+        } else {
+          DataDisabled();
+        }
         break;
     }
     inputString = "";
