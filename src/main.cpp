@@ -2,6 +2,13 @@
 
 uint8_t clock;
 uint8_t nextClock;
+uint8_t IRQ;
+uint8_t nextIRQ;
+uint8_t NMI;
+uint8_t nextNMI;
+uint8_t reset;
+uint8_t nextReset;
+
 uint64_t BIT_64 = 0x8000000000000000;
 String inputString = "";      // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
@@ -46,6 +53,7 @@ void SetData(uint8_t data) {
 }
 uint16_t LoadData() {
   uint8_t data = 0;
+  DataDisabled();
   PulseDataLockAndLatch();
   for (int i = 0; i < 8; i++) {
     data = data << 1 | (PIND >> 5 & B00000001);
@@ -66,6 +74,20 @@ uint16_t LoadFlag() {
     PulseClock();
   };
   return flag;
+}
+
+void PulseOpCodeLoad() {
+  PORTB &= B11111110;
+  PORTB |= B00000001;
+}
+uint16_t LoadOpCode() {
+  uint8_t opCode = 0;
+  PulseOpCodeLoad();
+  for (int i = 0; i < 8; i++) {
+    opCode = opCode << 1 | (PINB >> 5 & B00000001);
+    PulseClock();
+  };
+  return opCode;
 }
 
 void PulseControlLinesLatch() {
@@ -104,15 +126,31 @@ void setup() {
   DDRD  |= B01001100; //         ,PD6(D6)O,                 ,PD3(D3)O,PD2(D2)O
   DDRD  &= B01001111; // PD7(D7)I,        ,PD5(D5)I,PD4(D4)I,
 
-                      // DataData,DataEnbl
-  PORTC |= B00111000; // PC5(A5)H,PC4(A4)H,PC3(A3)H,
+                      // DataData,DataEnbl,Clock   ,Reset   ,NMI     ,IRQ
+  PORTC |= B00111000; // PC5(A5)H,PC4(A4)H,PC3(A3)H,PC3(A2)H,PC3(A1)H,PC3(A0)H,
   DDRC  |= B00110000; // PC5(A5)O,PC4(A4)O
-  DDRC  &= B11110111; //                  ,PC3(A3)I,
+  DDRC  &= B11110111; //                  ,PC3(A3)I,PC3(A2)I,PC3(A1)I,PC3(A0)I,
 
-                      // FlagLoad,CtrlLoad,Ctrl Data,Ctrl Enbl,Ctrl Reg
-  PORTB |= B00001111; //          ,PB3(D11)H,PB2(D10)H,PB1(D9)H,PB0(D8)H
-  PORTB &= B11101111; // PB4(D12)L
-  DDRB  |= B00011111; // PB4(D12)O,PB3(D11)O,PB2(D10)O,PB1(D9)O,PB0(D8)O
+                      // IRRegData,FlagLoad ,CtrlLoad ,CtrlData ,CtrlEnbl,Ctrl Reg
+  PORTB |= B00101111; // PB5(D13)H,         ,PB3(D11)H,PB2(D10)H,PB1(D9)H,PB0(D8)H
+  PORTB &= B11101111; //          ,PB4(D12)L
+  DDRB  |= B00011111; //          ,PB4(D12)O,PB3(D11)O,PB2(D10)O,PB1(D9)O,PB0(D8)O
+  DDRB  &= B11011111; // PB5(D13)I
+
+  // Read the current state of IRQ line
+  IRQ = PINC & B00000001;
+  Serial.write(IRQ > 0 ? "I" : "i");
+  Serial.flush();
+
+  // Read the current state of NMI line
+  NMI = PINC & B00000010;
+  Serial.write(NMI > 0 ? "N" : "n");
+  Serial.flush();
+
+  // Read the current state of reset line
+  reset = PINC & B00000100;
+  Serial.write(reset > 0 ? "R" : "r");
+  Serial.flush();
 
   // Read the current state of the clock
   clock = PINC & B00001000;
@@ -135,8 +173,23 @@ void loop() {
         Serial.write(address >> 8);
         Serial.flush();
         break;
+      case 'c': // retrieve clock
+        Serial.write(clock > 0 ? "C" : "c");
+        Serial.flush();
 
-      case 'C':
+      case 'i': // retrieve clock
+        Serial.write(IRQ > 0 ? "I" : "i");
+        Serial.flush();
+
+      case 'n': // retrieve clock
+        Serial.write(NMI > 0 ? "N" : "n");
+        Serial.flush();
+
+      case 'r': // retrieve clock
+        Serial.write(reset > 0 ? "R" : "r");
+        Serial.flush();
+
+      case 'L': // set control lines
         ctrl = 0;
         if (inputString.length() > 6) {
           for (int i = 1; i <= 6; i++) {
@@ -162,8 +215,14 @@ void loop() {
         }
         break;
 
-      case 'f': // retrieve flags & timing
-        Serial.write('d');
+      case 'o': // retrieve opCode
+        Serial.write('o');
+        Serial.write(LoadOpCode());
+        Serial.flush();
+        break;
+
+      case 's': // retrieve flags & timing
+        Serial.write('s');
         Serial.write(LoadFlag());
         Serial.flush();
         break;
@@ -171,6 +230,24 @@ void loop() {
     }
     inputString = "";
     stringComplete = false;
+  }
+  nextIRQ = PINC & B00000001;
+  if (nextIRQ != IRQ) {
+    IRQ = nextIRQ;
+    Serial.write(IRQ > 0 ? "I" : "i");
+    Serial.flush();
+  }
+  nextNMI = PINC & B00000010;
+  if (nextNMI != NMI) {
+    NMI = nextNMI;
+    Serial.write(NMI > 0 ? "N" : "n");
+    Serial.flush();
+  }
+  nextReset = PINC & B00000100;
+  if (nextReset != reset) {
+    reset = nextReset;
+    Serial.write(reset > 0 ? "R" : "r");
+    Serial.flush();
   }
   nextClock = PINC & B00001000;
   if (nextClock != clock) {
