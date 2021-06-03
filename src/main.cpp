@@ -9,7 +9,6 @@ uint8_t nextNMI;
 uint8_t reset;
 uint8_t nextReset;
 
-uint64_t BIT_64 = 0x8000000000000000;
 String inputString = "";      // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
 
@@ -50,6 +49,7 @@ void SetData(uint8_t data) {
   };
   PulseDataLockAndLatch();
   DataEnabled();
+  PORTC = (PORTC & B11101111);
 }
 uint16_t LoadData() {
   uint8_t data = 0;
@@ -104,16 +104,21 @@ void PulseControlLinesLoad() {
   PORTB |= B00010000;
   PORTB &= B11101111;
 }
-void SetControlLines(uint64_t ctrl) {
-  for (int i = 0; i < 48; i++) {
-    PORTB = (PORTB & B11111011) | ((ctrl & BIT_64) ? 4 : 0);
-    PulseClock();
-    ctrl <<= 1;
-  };
+void SetControlLines(String inputString) {
+  char c;
+  for (int i = 0; i < 6; i++) {
+    c = inputString.charAt(i);
+    for (int j = 0; j < 8; j++) {
+      PORTB = (PORTB & B11111011) | ((c & B10000000) ? 4 : 0);
+      c <<= 1;
+      PulseClock();
+    }
+  }
   PulseControlLinesLatch();
   ControlLinesEnabled();
   PulseControlLinesLoad();
   ControlLinesDisabled();
+  PORTB = (PORTB & B11111011);
 }
 
 void setup() {
@@ -140,17 +145,14 @@ void setup() {
   // Read the current state of IRQ line
   IRQ = PINC & B00000001;
   Serial.write(IRQ > 0 ? "I" : "i");
-  Serial.flush();
 
   // Read the current state of NMI line
   NMI = PINC & B00000010;
   Serial.write(NMI > 0 ? "N" : "n");
-  Serial.flush();
 
   // Read the current state of reset line
   reset = PINC & B00000100;
   Serial.write(reset > 0 ? "R" : "r");
-  Serial.flush();
 
   // Read the current state of the clock
   clock = PINC & B00001000;
@@ -163,7 +165,6 @@ void setup() {
 void loop() {
   // print the string when a newline arrives:
   if (stringComplete) {
-    uint64_t ctrl;
     uint16_t address;
     switch (inputString.charAt(0)) {
       case 'a': // retrieve address
@@ -190,14 +191,8 @@ void loop() {
         Serial.flush();
 
       case 'L': // set control lines
-        ctrl = 0;
         if (inputString.length() > 6) {
-          for (int i = 1; i <= 6; i++) {
-            ctrl |= inputString.charAt(i);
-            ctrl <<= 8;
-          }
-          ctrl <<= 8;
-          SetControlLines(ctrl);
+          SetControlLines(inputString.substring(1,7));
         }
         break;
 
@@ -253,7 +248,8 @@ void loop() {
   if (nextClock != clock) {
     clock = nextClock;
     Serial.write(clock > 0 ? "C" : "c");
-    Serial.flush();
+    //Serial.write(LoadFlag());
+    //Serial.flush();
   }
 }
 
