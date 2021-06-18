@@ -223,11 +223,9 @@ void loop() {
 
       case 'D': // set data
         if (inputString.length() > 2) {
-          if (!SetData(inputString.charAt(1))) {
-            Serial.write('e');
-            Serial.write(0x01);
-            Serial.flush();
-          }
+          Serial.write('e');
+          Serial.write(uint8_t(SetData(inputString.charAt(1)) ? 0x00 : 0x01));
+          Serial.flush();
         } else {
           DataDisabled();
         }
