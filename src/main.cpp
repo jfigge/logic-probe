@@ -8,6 +8,7 @@ uint8_t NMI;
 uint8_t nextNMI;
 uint8_t reset;
 uint8_t nextReset;
+bool    writeMode = false;
 
 String inputString = "";      // a String to hold incoming data
 bool stringComplete = false;  // whether the string is complete
@@ -41,7 +42,8 @@ void DataEnabled() {
 void DataDisabled() {
   PORTC |= B00100000;
 }
-void SetData(uint8_t data) {
+bool SetData(uint8_t data) {
+  if (writeMode) return false;
   for (int i = 0; i < 8; i++) {
     PORTC = (PORTC & B11101111) | ((data & B10000000) >> 3);
     PulseClock();
@@ -50,8 +52,10 @@ void SetData(uint8_t data) {
   PulseDataLockAndLatch();
   DataEnabled();
   PORTC = (PORTC & B11101111);
+  return true;
 }
 uint16_t LoadData() {
+  if (!writeMode) return 0x0100;
   uint8_t data = 0;
   DataDisabled();
   PulseDataLockAndLatch();
@@ -104,8 +108,16 @@ void PulseControlLinesLoad() {
   PORTB |= B00010000;
   PORTB &= B11101111;
 }
+bool setWriteMode(bool write) {
+  if (write != writeMode) {
+    writeMode = write;
+    if (write) DataDisabled();
+  }
+  return true;
+}
 void SetControlLines(String inputString) {
-  char c;
+  char c = inputString.charAt(1);
+  setWriteMode((c & B00010000) == 0);
   for (int i = 0; i < 6; i++) {
     c = inputString.charAt(i);
     for (int j = 0; j < 8; j++) {
@@ -166,6 +178,7 @@ void loop() {
   // print the string when a newline arrives:
   if (stringComplete) {
     uint16_t address;
+    uint16_t d;
     switch (inputString.charAt(0)) {
       case 'a': // retrieve address
         address = LoadAddress();
@@ -197,14 +210,24 @@ void loop() {
         break;
 
       case 'd': // retrieve data
-        Serial.write('d');
-        Serial.write(LoadData()); 
+        d = LoadData();
+        if (d <= 0xFF) {
+          Serial.write('d');
+          Serial.write(uint8_t(d)); 
+        } else {
+          Serial.write('e');
+          Serial.write(uint8_t(d >> 8)); 
+        }
         Serial.flush();
         break;
 
       case 'D': // set data
         if (inputString.length() > 2) {
-          SetData(inputString.charAt(1));
+          if (!SetData(inputString.charAt(1))) {
+            Serial.write('e');
+            Serial.write(0x01);
+            Serial.flush();
+          }
         } else {
           DataDisabled();
         }
