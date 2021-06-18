@@ -221,7 +221,6 @@ void loop() {
         Serial.write(LoadFlag());
         Serial.flush();
         break;
-
     }
     inputString = "";
     stringComplete = false;
