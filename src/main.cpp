@@ -109,11 +109,11 @@ void PulseControlLinesLoad() {
   PORTB &= B11101111;
 }
 bool setWriteMode(bool write) {
-  if (write != writeMode) {
+  if (write != writeMode) {    
     writeMode = write;
-    if (write) DataDisabled();
+    if (writeMode) DataDisabled();
   }
-  return true;
+  return writeMode;
 }
 void SetControlLines(String inputString) {
   char c = inputString.charAt(1);
@@ -191,15 +191,15 @@ void loop() {
         Serial.write(clock > 0 ? "C" : "c");
         Serial.flush();
 
-      case 'i': // retrieve clock
+      case 'i': // retrieve IRQ
         Serial.write(IRQ > 0 ? "I" : "i");
         Serial.flush();
 
-      case 'n': // retrieve clock
+      case 'n': // retrieve NMI
         Serial.write(NMI > 0 ? "N" : "n");
         Serial.flush();
 
-      case 'r': // retrieve clock
+      case 'r': // retrieve Reset
         Serial.write(reset > 0 ? "R" : "r");
         Serial.flush();
 
@@ -214,8 +214,10 @@ void loop() {
         if (d <= 0xFF) {
           Serial.write('d');
           Serial.write(uint8_t(d)); 
+          Serial.write(uint8_t(0)); 
         } else {
-          Serial.write('e');
+          Serial.write('d');
+          Serial.write(uint8_t(0)); 
           Serial.write(uint8_t(d >> 8)); 
         }
         Serial.flush();
@@ -223,7 +225,7 @@ void loop() {
 
       case 'D': // set data
         if (inputString.length() > 2) {
-          Serial.write('e');
+          Serial.write('D');
           Serial.write(uint8_t(SetData(inputString.charAt(1)) ? 0x00 : 0x01));
           Serial.flush();
         } else {
